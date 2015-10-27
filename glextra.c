@@ -1,11 +1,6 @@
-#include "glextra.h"
-#include <windows.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glext.h>
-#include <stdio.h>
+//#include <windows.h>
 #include <stdlib.h>
-
+#include "glextra.h"
 
 GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithExtension){
 
@@ -15,10 +10,11 @@ GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithEx
   GLchar * buffer = 0; // buffer where the characters will be stored
   GLuint shader = glCreateShader(shaderType); // the shader
 
-  long length;
+
 
   if (ptrToShaderFile)
   {
+    long length;
     fseek (ptrToShaderFile, 0, SEEK_END);
     length = ftell (ptrToShaderFile);
     fseek (ptrToShaderFile, 0, SEEK_SET);
@@ -47,7 +43,7 @@ GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithEx
   }
 
     free(buffer);
-
+    return shader;
 
 }
 
@@ -65,4 +61,8 @@ void glextraGetFunctionPointers(){
         glGetShaderiv = (PFNGLGETSHADERIVPROC)wglGetProcAddress("glGetShaderiv");
         glCreateProgram = (PFNGLCREATEPROGRAMPROC)wglGetProcAddress("glCreateProgram");
         glAttachShader = (PFNGLATTACHSHADERPROC)wglGetProcAddress("glAttachShader");
+        glLinkProgram = (PFNGLLINKPROGRAMPROC)wglGetProcAddress("glLinkProgram");
+        glGetProgramiv = (PFNGLGETPROGRAMIVPROC)wglGetProcAddress("glGetProgramiv");
+        glUseProgram = (PFNGLUSEPROGRAMPROC)wglGetProcAddress("glUseProgram");
+        glTransformFeedbackVaryings = (PFNGLTRANSFORMFEEDBACKVARYINGSPROC)wglGetProcAddress("glTransformFeedbackVaryings");
 }

@@ -1,48 +1,111 @@
 #include <windows.h>
-//#include <GL/gl.h>
-//#include <GL/glu.h>
-//#include <GL/glext.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glext.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "glextra.h" // this contains the opengl includes
 
-
+/* DECLARATIONS */
 
 const char g_szClassName[] = "myWindowClass";
 HDC ourWindowHandleToDeviceContext;
-GLfloat particles[300];// = {
-//   -0.7f, -0.1f, 0.0f,
-  // 0.7f, -0.4f, 0.0f,
-  // 0.2f,  0.7f, 0.0f,
-//};
-
-//static const GLfloat particles2[9];
+GLfloat particles[300];
 double width;
 double height;
 GLuint vbo;
 
-static const GLfloat particles2[] = {
-   -0.7f, -0.7f, 0.0f,
-   0.7f, -0.7f, 0.0f,
-   0.0f,  0.7f, 0.0f,
-};
-
 FILE *ptrToVertexShaderFile;
 FILE *ptrToFragmentShaderFile;
+
+// OpenGL Function Pointers
+PFNGLGENBUFFERSPROC glGenBuffers;
+PFNGLBINDBUFFERPROC glBindBuffer;
+PFNGLBUFFERDATAPROC glBufferData;
+PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
+PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
+PFNGLDISABLEVERTEXATTRIBARRAYPROC glDisableVertexAttribArray;
+PFNGLCREATESHADERPROC glCreateShader;
+PFNGLSHADERSOURCEPROC glShaderSource;
+PFNGLCOMPILESHADERPROC glCompileShader;
+PFNGLGETSHADERIVPROC glGetShaderiv;
+PFNGLCREATEPROGRAMPROC glCreateProgram;
+PFNGLATTACHSHADERPROC glAttachShader;
+PFNGLLINKPROGRAMPROC glLinkProgram;
+PFNGLGETPROGRAMIVPROC glGetProgramiv;
+PFNGLUSEPROGRAMPROC glUseProgram;
+PFNGLTRANSFORMFEEDBACKVARYINGSPROC glTransformFeedbackVaryings;
+
+/* FUNCTIONS */
+
+void glextraGetFunctionPointers(){
+
+        glGenBuffers = (PFNGLGENBUFFERSPROC)wglGetProcAddress("glGenBuffers");
+        glBindBuffer = (PFNGLBINDBUFFERPROC)wglGetProcAddress("glBindBuffer");
+        glBufferData = (PFNGLBUFFERDATAPROC)wglGetProcAddress("glBufferData");
+        glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)wglGetProcAddress("glVertexAttribPointer");
+        glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)wglGetProcAddress("glEnableVertexAttribArray");
+        glDisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)wglGetProcAddress("glDisableVertexAttribArray");
+        glCreateShader = (PFNGLCREATESHADERPROC)wglGetProcAddress("glCreateShader");
+        glShaderSource = (PFNGLSHADERSOURCEPROC)wglGetProcAddress("glShaderSource");
+        glCompileShader = (PFNGLCOMPILESHADERPROC)wglGetProcAddress("glCompileShader");
+        glGetShaderiv = (PFNGLGETSHADERIVPROC)wglGetProcAddress("glGetShaderiv");
+        glCreateProgram = (PFNGLCREATEPROGRAMPROC)wglGetProcAddress("glCreateProgram");
+        glAttachShader = (PFNGLATTACHSHADERPROC)wglGetProcAddress("glAttachShader");
+        glLinkProgram = (PFNGLLINKPROGRAMPROC)wglGetProcAddress("glLinkProgram");
+        glGetProgramiv = (PFNGLGETPROGRAMIVPROC)wglGetProcAddress("glGetProgramiv");
+        glUseProgram = (PFNGLUSEPROGRAMPROC)wglGetProcAddress("glUseProgram");
+        glTransformFeedbackVaryings = (PFNGLTRANSFORMFEEDBACKVARYINGSPROC)wglGetProcAddress("glTransformFeedbackVaryings");
+}
+
+GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithExtension){
+
+  FILE* ptrToShaderFile = fopen(sourceFileWithExtension,"r"); // pointer to the file containing the code
+  GLchar * buffer = 0; // buffer where the characters will be stored
+  GLuint shader = glCreateShader(shaderType); // the shader
+
+  if (ptrToShaderFile)
+  {
+    long length;
+    fseek (ptrToShaderFile, 0, SEEK_END);
+    length = ftell (ptrToShaderFile);
+    fseek (ptrToShaderFile, 0, SEEK_SET);
+    buffer = (char*)calloc (1, length); // the first argument to calloc is 1 because a char is 1 byte
+    if (buffer)
+    {
+      fread (buffer, 1, length, ptrToShaderFile);
+
+    }
+    fclose (ptrToShaderFile);
+  }
+
+  glShaderSource(shader,1,(const char* const*)&buffer,NULL);
+  glCompileShader(shader);
+
+  GLint isCompiled = 0;
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &isCompiled);
+  if(isCompiled == GL_FALSE)
+  {
+
+    FILE *f = fopen("shaderInBuffer.txt", "w");
+    fprintf(f,buffer);
+    fclose(f);
+    MessageBoxA(0,"Shader failed to compile", "Shader Status",0);
+
+  }
+
+    free(buffer);
+    return shader;
+
+}
 
 void draw(){
 
 
   glViewport(0, 0, width, height);
   glClearColor( 1.0f, 0.4f, 0.0f, 0.0f );
-
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-
- glColor3f(0.0f, 0.0f, 0.0f);
-
+  glColor3f(0.0f, 0.0f, 0.0f);
   glEnableVertexAttribArray(0);
-
   glVertexAttribPointer(
      0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
      3,                  // size
@@ -53,10 +116,9 @@ void draw(){
   );
 
   // Draw the triangle !
-  glPointSize(5.0);
+//  glPointSize(5.0);
 
   glDrawArrays(GL_POINTS, 0, 100); // Starting from vertex 0; 3 vertices total -> 1 triangle
-
   glDisableVertexAttribArray(0);
 
   //RenderFrame();
@@ -83,6 +145,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return 0;
 }
+
+/* MAIN */
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR lpCmdLine, int nCmdShow)
@@ -132,7 +196,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     hwnd = CreateWindowEx(
         WS_EX_CLIENTEDGE,
         g_szClassName,
-        "The title of my window",
+        "glWater",
         WS_OVERLAPPEDWINDOW,
         rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
         NULL, NULL, hInstance, NULL);
@@ -188,8 +252,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       GLuint vertexShader   = glextraLoadShaderFromSourceFile(GL_VERTEX_SHADER,   "vertexshader.glsl");
       GLuint fragmentShader = glextraLoadShaderFromSourceFile(GL_FRAGMENT_SHADER, "fragmentShader.glsl");
       GLuint mProgram = glCreateProgram();
+      glEnable(GL_PROGRAM_POINT_SIZE);
+    //  glEnable(GL_POINT_SIZE);
       glAttachShader(mProgram, vertexShader);
       glAttachShader(mProgram, fragmentShader);
+
+//      const GLchar* feedbackVaryings[] = { "outValue" };
+  //    glTransformFeedbackVaryings(mProgram, 1, feedbackVaryings, GL_INTERLEAVED_ATTRIBS);
+
+      glLinkProgram(mProgram);
+
+
+      GLint isLinked = 0;
+      glGetProgramiv(mProgram, GL_LINK_STATUS, (int *)&isLinked);
+      if(isLinked == GL_FALSE){
+
+        MessageBoxA(0,"Failed to link OpenGl program", "OpenGL Program Status",0);
+      }
+
+
+      glUseProgram(mProgram);
+
+//lol = 7;
+
       //glEnableVertexAttribArray
 
       glGenBuffers(1, &vbo);

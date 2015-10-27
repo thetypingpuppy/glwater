@@ -1,10 +1,8 @@
+ #include <GL/gl.h>
+ #include <GL/glu.h>
+ #include <GL/glext.h>
+ #include <stdio.h>
 
-//#include <windows.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glext.h>
-//#include <stdio.h>
-///#include <stdlib.h>
 
 PFNGLGENBUFFERSPROC glGenBuffers;
 PFNGLBINDBUFFERPROC glBindBuffer;
@@ -18,8 +16,12 @@ PFNGLCOMPILESHADERPROC glCompileShader;
 PFNGLGETSHADERIVPROC glGetShaderiv;
 PFNGLCREATEPROGRAMPROC glCreateProgram;
 PFNGLATTACHSHADERPROC glAttachShader;
+PFNGLLINKPROGRAMPROC glLinkProgram;
+PFNGLGETPROGRAMIVPROC glGetProgramiv;
+PFNGLUSEPROGRAMPROC glUseProgram;
+PFNGLTRANSFORMFEEDBACKVARYINGSPROC glTransformFeedbackVaryings;
+
 
 void glextraGetFunctionPointers();
-
 
 GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithExtension);

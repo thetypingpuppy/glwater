@@ -13,6 +13,7 @@ GLfloat particles[300];
 double width;
 double height;
 GLuint vbo;
+GLuint feedbackBufferObject;
 
 FILE *ptrToVertexShaderFile;
 FILE *ptrToFragmentShaderFile;
@@ -20,6 +21,7 @@ FILE *ptrToFragmentShaderFile;
 // OpenGL Function Pointers
 PFNGLGENBUFFERSPROC glGenBuffers;
 PFNGLBINDBUFFERPROC glBindBuffer;
+PFNGLBINDBUFFERBASEPROC glBindBufferBase;
 PFNGLBUFFERDATAPROC glBufferData;
 PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
 PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
@@ -34,6 +36,10 @@ PFNGLLINKPROGRAMPROC glLinkProgram;
 PFNGLGETPROGRAMIVPROC glGetProgramiv;
 PFNGLUSEPROGRAMPROC glUseProgram;
 PFNGLTRANSFORMFEEDBACKVARYINGSPROC glTransformFeedbackVaryings;
+PFNGLBINDBUFFERRANGEPROC glBindBufferRange;
+PFNGLBEGINTRANSFORMFEEDBACKPROC glBeginTransformFeedback;
+PFNGLENDTRANSFORMFEEDBACKPROC glEndTransformFeedback;
+PFNGLBINDTRANSFORMFEEDBACKPROC glBindTransformFeedback;
 
 /* FUNCTIONS */
 
@@ -41,6 +47,7 @@ void glextraGetFunctionPointers(){
 
         glGenBuffers = (PFNGLGENBUFFERSPROC)wglGetProcAddress("glGenBuffers");
         glBindBuffer = (PFNGLBINDBUFFERPROC)wglGetProcAddress("glBindBuffer");
+        glBindBufferBase = (PFNGLBINDBUFFERBASEPROC)wglGetProcAddress("glBindBufferBase");
         glBufferData = (PFNGLBUFFERDATAPROC)wglGetProcAddress("glBufferData");
         glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)wglGetProcAddress("glVertexAttribPointer");
         glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)wglGetProcAddress("glEnableVertexAttribArray");
@@ -55,6 +62,11 @@ void glextraGetFunctionPointers(){
         glGetProgramiv = (PFNGLGETPROGRAMIVPROC)wglGetProcAddress("glGetProgramiv");
         glUseProgram = (PFNGLUSEPROGRAMPROC)wglGetProcAddress("glUseProgram");
         glTransformFeedbackVaryings = (PFNGLTRANSFORMFEEDBACKVARYINGSPROC)wglGetProcAddress("glTransformFeedbackVaryings");
+        glBindBufferRange = (PFNGLBINDBUFFERRANGEPROC)wglGetProcAddress("glBindBufferRange");
+        glBeginTransformFeedback  = (PFNGLBEGINTRANSFORMFEEDBACKPROC)wglGetProcAddress("glBeginTransformFeedback");
+        glEndTransformFeedback = (PFNGLENDTRANSFORMFEEDBACKPROC)wglGetProcAddress("glEndTransformFeedback");
+        glBindTransformFeedback = (PFNGLBINDTRANSFORMFEEDBACKPROC)wglGetProcAddress("glBindTransformFeedback");
+
 }
 
 GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithExtension){
@@ -100,9 +112,10 @@ GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithEx
 
 void draw(){
 
+//glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, feedbackBufferObject);
 
   glViewport(0, 0, width, height);
-  glClearColor( 1.0f, 0.4f, 0.0f, 0.0f );
+  glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glColor3f(0.0f, 0.0f, 0.0f);
   glEnableVertexAttribArray(0);
@@ -115,14 +128,35 @@ void draw(){
      (void*)0            // array buffer offset
   );
 
+  //glGenBuffers(1, &vbo);
+//  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+
   // Draw the triangle !
 //  glPointSize(5.0);
 
+glBeginTransformFeedback(GL_POINTS);
   glDrawArrays(GL_POINTS, 0, 100); // Starting from vertex 0; 3 vertices total -> 1 triangle
+  glEndTransformFeedback();
+
+
   glDisableVertexAttribArray(0);
 
+   GLint temp = vbo;
+   vbo = feedbackBufferObject;
+   feedbackBufferObject = temp;
+
+glBindBuffer(GL_ARRAY_BUFFER, vbo);
+glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, feedbackBufferObject);
+
+  // glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
+
+  // glBindBuffer(GL_ARRAY_BUFFER, vbo);
+//   glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, feedbackBufferObject);
+//glFinish();
   //RenderFrame();
   SwapBuffers(ourWindowHandleToDeviceContext);
+
 }
 
 // Step 4: the Window Procedure
@@ -253,12 +287,35 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       GLuint fragmentShader = glextraLoadShaderFromSourceFile(GL_FRAGMENT_SHADER, "fragmentShader.glsl");
       GLuint mProgram = glCreateProgram();
       glEnable(GL_PROGRAM_POINT_SIZE);
+      glEnable(GL_POINT_SMOOTH);
     //  glEnable(GL_POINT_SIZE);
       glAttachShader(mProgram, vertexShader);
       glAttachShader(mProgram, fragmentShader);
 
 //      const GLchar* feedbackVaryings[] = { "outValue" };
   //    glTransformFeedbackVaryings(mProgram, 1, feedbackVaryings, GL_INTERLEAVED_ATTRIBS);
+
+
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  //glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+
+  for(int i=0;i<300;i++){
+        *(particles+i) = -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+   }
+
+  glBufferData(GL_ARRAY_BUFFER, sizeof(particles), particles, GL_DYNAMIC_DRAW);
+
+
+  glGenBuffers(1, &feedbackBufferObject);
+  glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, feedbackBufferObject);
+  glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, sizeof(particles), NULL, GL_DYNAMIC_COPY);
+//  glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, feedbackBufferObject,0,sizeof(particles));
+
+  static const GLchar* const lol[] = {"something"};
+  glTransformFeedbackVaryings(mProgram, 1, lol, GL_INTERLEAVED_ATTRIBS);
+
+
 
       glLinkProgram(mProgram);
 
@@ -277,15 +334,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
       //glEnableVertexAttribArray
 
-      glGenBuffers(1, &vbo);
-     	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-      //glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
-      for(int i=0;i<300;i++){
-            *(particles+i) = -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
-       }
-
-     	glBufferData(GL_ARRAY_BUFFER, sizeof(particles), particles, GL_DYNAMIC_DRAW);
 
       while( 1 )
       {

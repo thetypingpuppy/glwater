@@ -5,22 +5,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* DECLARATIONS */
+#define NUM_BUFFER_OBJECTS 10
+#define NUM_PARTICLES 1024
+#define WORK_GROUP_SIZE 128
+#define GRID_X 80.0
+#define GRID_Y 60.0
+
 HGLRC ourOpenGLRenderingContext;
 const char g_szClassName[] = "myWindowClass";
 HDC ourWindowHandleToDeviceContext;
-GLfloat particlesXYZ[900];
-//GLfloat densityAndVelocity[400]; //100 particles
-double width;
-double height;
-GLuint vbo[2];
-GLuint vertexShader;
 GLuint mProgram;
-FILE *ptrToVertexShaderFile;
-FILE *ptrToFragmentShaderFile;
+GLuint mProgram2;
+GLuint mComputeProgram;
+GLuint mDensityComputeProgram;
+  GLuint temp[NUM_BUFFER_OBJECTS];
+struct pos{
+  float x,y,z,w;
+};
+
+struct vel{
+  float vx,vy,vz,vw;
+};
+
+struct prop{
+  float density, pressure, unused1, unused2;
+};
+
 
 // OpenGL Function Pointers
-PFNGLGENBUFFERSPROC glGenBuffers;
+PFNGLGENBUFFERSPROC glGenBuffers; // These typedefs are provided in glext.h
 PFNGLBINDBUFFERPROC glBindBuffer;
 PFNGLBINDBUFFERBASEPROC glBindBufferBase;
 PFNGLBUFFERDATAPROC glBufferData;
@@ -44,11 +57,17 @@ PFNGLBINDTRANSFORMFEEDBACKPROC glBindTransformFeedback;
 PFNGLBINDATTRIBLOCATIONPROC glBindAttribLocation;
 PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
 PFNGLGENTRANSFORMFEEDBACKSPROC glGenTransformFeedbacks;
+PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
+PFNGLMAPBUFFERRANGEPROC glMapBufferRange;
+PFNGLUNMAPBUFFERPROC glUnmapBuffer;
+PFNGLDISPATCHCOMPUTEPROC glDispatchCompute;
+PFNGLMEMORYBARRIERPROC glMemoryBarrier;
 
 /* FUNCTIONS */
 
 void glextraGetFunctionPointers(){
 
+        //wglGetProcAddress is provided in windows.h
         glGenBuffers = (PFNGLGENBUFFERSPROC)wglGetProcAddress("glGenBuffers");
         glBindBuffer = (PFNGLBINDBUFFERPROC)wglGetProcAddress("glBindBuffer");
         glBindBufferBase = (PFNGLBINDBUFFERBASEPROC)wglGetProcAddress("glBindBufferBase");
@@ -73,10 +92,15 @@ void glextraGetFunctionPointers(){
         glBindAttribLocation = (PFNGLBINDATTRIBLOCATIONPROC)wglGetProcAddress("glBindAttribLocation");
         glGetAttribLocation = (PFNGLGETATTRIBLOCATIONPROC)wglGetProcAddress("glGetAttribLocation");
         glGenTransformFeedbacks = (PFNGLGENTRANSFORMFEEDBACKSPROC)wglGetProcAddress("glGenTransformFeedbacks");
+        glGetShaderInfoLog = (PFNGLGETSHADERINFOLOGPROC)wglGetProcAddress("glGetShaderInfoLog");
+        glMapBufferRange = (PFNGLMAPBUFFERRANGEPROC)wglGetProcAddress("glMapBufferRange");
+        glUnmapBuffer = (PFNGLUNMAPBUFFERPROC)wglGetProcAddress("glUnmapBuffer");
+        glDispatchCompute = (PFNGLDISPATCHCOMPUTEPROC)wglGetProcAddress("glDispatchCompute");
+        glMemoryBarrier = (PFNGLMEMORYBARRIERPROC)wglGetProcAddress("glMemoryBarrier");
 }
 
 
-GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithExtension){
+GLuint glExtraCreateShaderFromSourceFile(GLenum shaderType, char* sourceFileWithExtension){
 
   FILE* ptrToShaderFile = fopen(sourceFileWithExtension,"r"); // pointer to the file containing the code
   GLchar * buffer = 0; // buffer where the characters will be stored
@@ -105,10 +129,15 @@ GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithEx
   if(isCompiled == GL_FALSE)
   {
 
+    GLint maxLength = 0;
+  	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
+    GLchar logString[maxLength + 1];
+    glGetShaderInfoLog(shader, maxLength, 0, logString);
+
     FILE *f = fopen("shaderInBuffer.txt", "w");
     fprintf(f,buffer);
     fclose(f);
-    MessageBoxA(0,"Shader failed to compile", "Shader Status",0);
+    MessageBoxA(0,(char*)logString, "Shader Status",0);
 
   }
 
@@ -117,63 +146,131 @@ GLuint glextraLoadShaderFromSourceFile(GLenum shaderType, char* sourceFileWithEx
 
 }
 
-void draw(){
+void draw(GLuint vbo[NUM_BUFFER_OBJECTS], double width, double height){
 
-  glViewport(0, 0, width, height);
+
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, vbo[0]);
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, vbo[1]);
+
+
+
+  glUseProgram(mComputeProgram);
+  glDispatchCompute( NUM_PARTICLES / WORK_GROUP_SIZE, 1, 1 );
+//glFinish();
+  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+//
+
+
+
+
+
+  //glViewport(0, 0, width, height);
   glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glColor3f(0.0f, 0.0f, 0.0f);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(
-     0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-     4,                  // size
-     GL_FLOAT,           // type
-     GL_FALSE,           // normalized?
-     9*sizeof(GLfloat),                  // stride
-     (void*)0            // array buffer offset
-  );
-  glEnableVertexAttribArray(glGetAttribLocation(mProgram, "vxvyvz"));// not efficient"
-  glVertexAttribPointer(
-     glGetAttribLocation(mProgram, "vxvyvz"),                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-     3,                  // size
-     GL_FLOAT,           // type
-     GL_FALSE,           // normalized?
-     9*sizeof(GLfloat),                  // stride
-     (void*)(4*sizeof(GLfloat))           // array buffer offset
-  );
-  glEnableVertexAttribArray(glGetAttribLocation(mProgram, "densityAndPressure"));// not efficient"
-  glVertexAttribPointer(
-     glGetAttribLocation(mProgram, "densityAndPressure"),                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-     2,                  // size
-     GL_FLOAT,           // type
-     GL_FALSE,           // normalized?
-     9*sizeof(GLfloat),                  // stride
-     (void*)(7*sizeof(GLfloat))           // array buffer offset
-  );
 
 
-  glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, vbo[1]);
+
+  // glEnableVertexAttribArray(0);
+  // glVertexAttribPointer(
+  //    0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+  //    4,                  // size
+  //    GL_FLOAT,           // type
+  //    GL_FALSE,           // normalized?
+  //    0*sizeof(GLfloat),                  // stride
+  //    (void*)0            // array buffer offset
+  // );
+
+glEnableClientState(GL_VERTEX_ARRAY);
+
+glUseProgram(mProgram);
+glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+
+  glVertexPointer( 4, GL_FLOAT, 0, (void *)0 );
+
+  glDrawArrays(GL_POINTS, 0, NUM_PARTICLES); // Starting from vertex 0; 3 vertices total -> 1 triangles
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 
-  glBeginTransformFeedback(GL_POINTS);
-  glDrawArrays(GL_POINTS, 0, 100); // Starting from vertex 0; 3 vertices total -> 1 triangle
-  glEndTransformFeedback();
+
+  glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+  ///glFlush();
+
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[6]);
+  glVertexPointer( 4, GL_FLOAT, 0, (void *)0 );
 
 
-  glDisableVertexAttribArray(0);
-  glDisableVertexAttribArray(glGetAttribLocation(mProgram, "vxvyvz"));
-  glDisableVertexAttribArray(glGetAttribLocation(mProgram, "densityAndPressure"));
+  glDrawArrays(GL_POINTS, 0, 300); // Starting from vertex 0; 3 vertices total -> 1 triangles
 
- // Swap around feedback and vertex buffers
-   GLint temp = vbo[0];
-   vbo[0] = vbo[1];
-   vbo[1] = temp;
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+//  glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+  //glViewport(0, 0, width, height);
+
+
+
+  glUseProgram(mProgram2);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[7]);
+
+
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable( GL_BLEND );
+
+    glVertexPointer( 4, GL_FLOAT, 0, (void *)0 );
+
+//  glEnableVertexAttribArray(0);
+
+
+  glDrawArrays(GL_POINTS, 0, (GLsizei)GRID_X*GRID_Y);
+
+glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glDisableClientState(GL_VERTEX_ARRAY);
+
+
+    glDisable( GL_BLEND );
+
+//  glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+for(int i=0;i<NUM_BUFFER_OBJECTS;i++){
+
+  temp[i] = vbo[i];
+
+}
+
+vbo[0] = temp[3];
+vbo[1] = temp[4];
+vbo[2] = temp[5];
+vbo[3] = temp[0];
+vbo[4] = temp[1];
+vbo[5] = temp[2];
+
+
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vbo[0]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, vbo[1]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, vbo[2]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, vbo[3]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, vbo[4]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, vbo[5]);
+//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, vbo[6]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, vbo[7]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, vbo[8]);
+
+
+
+
+//glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[7]);
+
+
+
+
 
   SwapBuffers(ourWindowHandleToDeviceContext);
+
 
 }
 
@@ -206,6 +303,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     WNDCLASSEX wc;
     HWND hwnd;
     MSG Msg;
+    //GLfloat particlesXYZ[900];
+    GLuint vbo[NUM_BUFFER_OBJECTS];
+
+    GLuint vertexShader;
+
+    double width;
+    double height;
+
 
     //Step 1: Registering the Window Class
     wc.cbSize        = sizeof(WNDCLASSEX);
@@ -227,8 +332,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
             MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
-
-
 
     RECT rect;
     SetRect( &rect, 50,  // left
@@ -301,68 +404,286 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       glextraGetFunctionPointers();
 
 
-      vertexShader   = glextraLoadShaderFromSourceFile(GL_VERTEX_SHADER,   "vertexshader.glsl");
-      GLuint fragmentShader = glextraLoadShaderFromSourceFile(GL_FRAGMENT_SHADER, "fragmentshader.glsl");
+  // Set up buffer objects
+ glGenBuffers(NUM_BUFFER_OBJECTS, vbo);
+
+// SET UP COMPUTE
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[0]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, NUM_PARTICLES*sizeof(struct pos), NULL, GL_STATIC_DRAW);
+GLint bufMask = GL_MAP_WRITE_BIT|GL_MAP_INVALIDATE_BUFFER_BIT;
+struct pos *points = (struct pos *) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, NUM_PARTICLES * sizeof(struct pos), bufMask);
+
+for(int i=0; i<NUM_PARTICLES; i++){
+
+  points[i].x =  -0.8f + 1.6f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+
+  points[i].y =  -0.8f + 1.6f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+  points[i].z =   0.0f;
+  points[i].w = 0.0f;
+
+}
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[1]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, NUM_PARTICLES * sizeof(struct vel), NULL, GL_STATIC_DRAW);
+
+struct vel *vels= (struct vel*) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, NUM_PARTICLES * sizeof(struct vel), bufMask);
+
+
+for(int i=0; i<NUM_PARTICLES; i++){
+
+  vels[i].vx = 0.0 *( -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX));
+
+  vels[i].vy = 0.0 *( -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX));
+  vels[i].vz =   0.0f;
+  vels[i].vw = 0.0f;
+
+}
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[2]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, NUM_PARTICLES * sizeof(struct prop), NULL, GL_STATIC_DRAW);
+
+struct prop *props = (struct prop*) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, NUM_PARTICLES * sizeof(struct prop), bufMask);
+
+for(int i=0; i<NUM_PARTICLES; i++){
+
+  props[i].density =  (GLfloat) 100.0f;// * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+
+  props[i].pressure =  0.0f;// * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+  props[i].unused1 =   0.0f;
+  props[i].unused2 =   0.0f;
+
+}
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[3]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, NUM_PARTICLES * sizeof(struct pos), NULL, GL_STATIC_DRAW);
+
+struct pos *points2 = (struct pos *) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, NUM_PARTICLES * sizeof(struct pos), bufMask);
+
+for(int i=0; i<NUM_PARTICLES; i++){
+
+  points2[i].x =  -0.2f + 0.4f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+
+  points2[i].y =  -0.8f + 1.6f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+  points2[i].z =   0.0f;
+  points2[i].w = 0.0f;
+
+}
+
+
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[4]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, NUM_PARTICLES * sizeof(struct vel), NULL, GL_STATIC_DRAW);
+
+struct vel *vels2= (struct vel*) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, NUM_PARTICLES * sizeof(struct vel), bufMask);
+
+
+for(int i=0; i<NUM_PARTICLES; i++){
+
+  vels2[i].vx =  0.1f *( -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX));
+
+  vels2[i].vy =  0.1f *( -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX));
+  vels2[i].vz =   0;
+  vels2[i].vw = 0;
+
+}
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[5]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, NUM_PARTICLES * sizeof(struct prop), NULL, GL_STATIC_DRAW);
+
+struct prop *props2 = (struct prop*) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, NUM_PARTICLES * sizeof(struct prop), bufMask);
+
+for(int i=0; i<NUM_PARTICLES; i++){
+
+  props2[i].density = (GLfloat) 100.0f;// * (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+
+  props2[i].pressure =  0.0f ;//* (GLfloat) (rand()) / (GLfloat) (RAND_MAX);
+  props2[i].unused1 =   0;
+  props2[i].unused2 =   0;
+
+}
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[6]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, 300 * sizeof(struct pos), NULL, GL_STATIC_DRAW);
+
+struct pos *boundaryPoints= (struct pos*) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, 300 * sizeof(struct prop), bufMask);
+
+float x = -0.9;
+float y = 0.9;
+for(int i=0; i<300; i++){
+
+  if(i<100){
+
+
+    boundaryPoints[i].x = -0.9;
+    boundaryPoints[i].y = y;
+    y -= 0.02;
+  }
+
+  if((i<201) & (i >= 100)){
+
+    boundaryPoints[i].x = x;
+    boundaryPoints[i].y = -0.9;
+    x += 0.02;
+
+  }
+
+  if((i<300) & (i >= 201)){
+
+    boundaryPoints[i].x = 0.9;
+    boundaryPoints[i].y = y;
+    y += 0.02;
+
+  }
+
+  boundaryPoints[i].z =   0.0f;
+  boundaryPoints[i].w = 0.0f;
+
+
+}
+
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[7]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr)GRID_X*GRID_Y * sizeof(struct pos), NULL, GL_STATIC_DRAW);
+
+struct pos *grid = (struct pos *) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, (GLsizeiptr)GRID_X*GRID_Y * sizeof(struct pos), bufMask);
+
+
+for (int j=0; j<GRID_Y; j++){
+  for(int i=0; i<GRID_X; i++){
+
+      grid[j*(int)GRID_X+i].x = -1.0f  + 1.0f/GRID_X + (GLfloat)i*(2-(1/(GLfloat)GRID_X))/((GLfloat)GRID_X);
+      grid[j*(int)GRID_X+i].y = -1.0f  + 1.0f/GRID_Y + (GLfloat)j*(2-(1/GRID_Y))/(GRID_Y);;
+      grid[j*(int)GRID_X+i].z = 0.0f;
+      grid[j*(int)GRID_X+i].w = 1.0f;
+  }
+}
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[8]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr)GRID_X*GRID_Y * sizeof(struct pos), NULL, GL_STATIC_DRAW);
+
+struct pos *gridColors = (struct pos *) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, (GLsizeiptr)GRID_X*GRID_Y * sizeof(struct pos), bufMask);
+
+
+for (int j=0; j<GRID_Y; j++){
+  for(int i=0; i<GRID_X; i++){
+
+      gridColors[j*(int)GRID_X+i].x = 1.0f;//-1.0f  + 1.0f/GRID_X + (GLfloat)i*(2-(1/(GLfloat)GRID_X))/((GLfloat)GRID_X);
+      gridColors[j*(int)GRID_X+i].y = 0.0f;//  + 1.0f/GRID_Y + (GLfloat)j*(2-(1/GRID_Y))/(GRID_Y);;
+      gridColors[j*(int)GRID_X+i].z = 0.0f;
+      gridColors[j*(int)GRID_X+i].w = 1.0f;
+  }
+}
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+glBindBuffer(GL_SHADER_STORAGE_BUFFER, vbo[9]);
+glBufferData(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr)GRID_X*GRID_Y * sizeof(struct pos), NULL, GL_STATIC_DRAW);
+
+struct pos *gridActivations = (struct pos *) glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, (GLsizeiptr)GRID_X*GRID_Y * sizeof(struct pos), bufMask);
+
+
+for (int j=0; j<GRID_Y; j++){
+  for(int i=0; i<GRID_X; i++){
+
+      gridActivations[j*(int)GRID_X+i].x = 0.0f;//-1.0f  + 1.0f/GRID_X + (GLfloat)i*(2-(1/(GLfloat)GRID_X))/((GLfloat)GRID_X);
+       gridActivations[j*(int)GRID_X+i].y = 0.0f;//  + 1.0f/GRID_Y + (GLfloat)j*(2-(1/GRID_Y))/(GRID_Y);;
+       gridActivations[j*(int)GRID_X+i].z = 0.0f;
+       gridActivations[j*(int)GRID_X+i].w = 0.0f;
+  }
+}
+glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vbo[0]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, vbo[1]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, vbo[2]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, vbo[3]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, vbo[4]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, vbo[5]);
+
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, vbo[6]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, vbo[7]);
+glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, vbo[8]);
+
+GLuint computeShader   = glExtraCreateShaderFromSourceFile(GL_COMPUTE_SHADER,   "computeshader.glsl");
+
+
+
+mComputeProgram = glCreateProgram();
+glAttachShader(mComputeProgram, computeShader);
+glLinkProgram(mComputeProgram);
+
+GLint isLinked = 0;
+glGetProgramiv(mComputeProgram, GL_LINK_STATUS, (int *)&isLinked);
+if(isLinked == GL_FALSE){
+
+  MessageBoxA(0,"Failed to link OpenGl Compute program", "OpenGL Compute Program Status",0);
+}
+
+GLuint densityComputeShader   = glExtraCreateShaderFromSourceFile(GL_COMPUTE_SHADER,   "densityshader.glsl");
+mDensityComputeProgram = glCreateProgram();
+
+glAttachShader(mDensityComputeProgram, densityComputeShader);
+glLinkProgram(mDensityComputeProgram);
+
+
+
+
+      vertexShader   = glExtraCreateShaderFromSourceFile(GL_VERTEX_SHADER,   "vertexshader.glsl");
+      GLuint fragmentShader = glExtraCreateShaderFromSourceFile(GL_FRAGMENT_SHADER, "fragmentshader.glsl");
       mProgram = glCreateProgram();
       glEnable(GL_PROGRAM_POINT_SIZE);
-      glEnable(GL_POINT_SMOOTH);
-    //  glEnable(GL_POINT_SIZE);
       glAttachShader(mProgram, vertexShader);
       glAttachShader(mProgram, fragmentShader);
-
- static const GLchar* const lol[] = {"fbXYZw", "fbDensityAndPressure", "fbVxvyvz"};
- glTransformFeedbackVaryings(mProgram, 3, lol, GL_INTERLEAVED_ATTRIBS);
-
-
       glLinkProgram(mProgram);
-      GLint isLinked = 0;
+      isLinked = 0;
       glGetProgramiv(mProgram, GL_LINK_STATUS, (int *)&isLinked);
       if(isLinked == GL_FALSE){
 
         MessageBoxA(0,"Failed to link OpenGl program", "OpenGL Program Status",0);
       }
 
-      int count = 0;
-      for(int i=0;i<900;i++){
+      GLuint vertexShaderBlobs   = glExtraCreateShaderFromSourceFile(GL_VERTEX_SHADER,   "MetablobVertexShader.glsl");
+      mProgram2 = glCreateProgram();
+    //  glEnable(GL_PROGRAM_POINT_SIZE);
 
-          count++;
+//
 
-          if(count==1||count==2||count==3){
-            *(particlesXYZ+i) = -1.0f + 2.0f * (GLfloat) (rand()) / (GLfloat) (RAND_MAX); // positions
-            }
+      //glEnable(GL_POINT_SMOOTH);
+    //  glEnable(GL_POINT_SIZE);
+      glAttachShader(mProgram2, vertexShaderBlobs);
+      glAttachShader(mProgram2, fragmentShader);
 
-            if (count==4){
-                *(particlesXYZ+i) = 1.0f;
-            }
+      glLinkProgram(mProgram2);
+      isLinked = 0;
+      glGetProgramiv(mProgram2, GL_LINK_STATUS, (int *)&isLinked);
+      if(isLinked == GL_FALSE){
 
-            if (count==5){
-                *(particlesXYZ+i) = 1000.0f; // density of water
-            }
+        MessageBoxA(0,"Failed to link OpenGl program 2", "OpenGL Program Status",0);
+      }
 
-            if(count == 8||count==6||count==7){
-                *(particlesXYZ+i) = 0.0f;}
-
-
-            if(count == 9){
-                *(particlesXYZ+i) = 0.0f;
-              count = 0;}
-
-
-       }
-
-
-         // Set up buffer objects
-    glGenBuffers(2, vbo);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(particlesXYZ), particlesXYZ, GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glBindBuffer(GL_ARRAY_BUFFER,  vbo[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(particlesXYZ), particlesXYZ, GL_DYNAMIC_COPY);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-
+    glUseProgram(mDensityComputeProgram);
+    glDispatchCompute( NUM_PARTICLES / WORK_GROUP_SIZE, 1, 1 );
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
       glUseProgram(mProgram);
 
@@ -387,7 +708,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
               // this draw() function.
 
 
-              draw();
+              draw(vbo, width, height);
           }
       }
 

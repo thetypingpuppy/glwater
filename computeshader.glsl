@@ -7,7 +7,7 @@
 #define timeStep 0.0025
 #define gravity 0//-9.8
 #define k 2500000
-#define BALL_RADIUS 0.05
+#define BALL_RADIUS 0.01
 //typedef PropertiesPrevious[gid].x PropertiesPrevious[gid].density
 
 layout( std140, binding=0 ) buffer PosPrev
@@ -93,6 +93,7 @@ float toPower4(float x){ // GLSL pow doesn't handle negatives properly
 void main() {
 
 uint gid = gl_GlobalInvocationID.x;
+//float gidf = (float)gid;
 
 float dist;
 
@@ -169,7 +170,22 @@ for(int j=0; j < 100; j++){
 Boundaries[j].x = -0.7 + 0.2*(sin(Boundaries[j].z));
 //Boundaries[j].x = -0.7 + 0.2*(2*(Boundaries[j].z/8 - floor(0.5 + Boundaries[j].z/8)));
 }
+
+
+  for(int j = 0; j < 60; j++){
+
+for(int i = 0; i < 80; i++){
+
+
+   GridCol[j*80 + i].w = 0.0;
+
+
 }
+
+}
+}
+
+
 
 
 
@@ -178,32 +194,45 @@ Boundaries[j].x = -0.7 + 0.2*(sin(Boundaries[j].z));
 Velocities[gid].xy = 0.999999999*VelocitiesPrevious[gid].xy +   0.5*timeStep * vec2(0,-1.2) + timeStep*boundaryTerm - timeStep * pressureTerm + timeStep*viscosityTerm;//(viscosityTerm + pressureTerm);
 
 
-if (dist < h){
-
-}
 
 Positions[gid].xy = PositionsPrevious[gid].xy + (Velocities[gid].xy + velocityCorrection)*timeStep;
 
-Velocities[gid].xy = 0.999999999*VelocitiesPrevious[gid].xy +   0.5*timeStep * vec2(0,-1.9) + timeStep*boundaryTerm - timeStep * pressureTerm + timeStep*viscosityTerm;//(viscosityTerm + pressureTerm);
+Velocities[gid].xy = 0.999999999*VelocitiesPrevious[gid].xy +   0.5*timeStep * vec2(0,-2.1) + timeStep*boundaryTerm - timeStep * pressureTerm + timeStep*viscosityTerm;//(viscosityTerm + pressureTerm);
 
 Properties[gid].x = PropertiesPrevious[gid].x  + timeStep * dDensitydt;
   Properties[gid].y =  k*(pow(PropertiesPrevious[gid].x/restingDensity,7) - 1);
 
 
-float metaballActivation = 0.0f;
 
-    for(int j = 0; j < 60; j++){
+  for(int j = 0; j < 60; j++){
 
   for(int i = 0; i < 80; i++){
+//  GridCol[j*80+i].w = min(1.0,float(gid)) * GridCol[j*80+i].w;
+  GridCol[j*80+i].w += 0.05;//BALL_RADIUS / (abs(Grid[j*80+i].x - Positions[gid].x) + abs(Grid[j*80+i].y - Positions[gid].y));//(pow(BALL_RADIUS,2) / (toPower2(Grid[j*80+i].x - PositionsPrevious[gid].x) + toPower2(Grid[j*80+i].y - PositionsPrevious[gid].y)));
+  GridCol[j*80+i].w = min(GridCol[j*80+i].w, 1);
+  //GridCol[j*80+i].w = ceil(GridCol[j*80+i].w-0.01);
 
+  }
 
-     GridAct[j*60+i].x = GridAct[j*60+i].x  + (pow(BALL_RADIUS,2) / toPower2(Grid[j*60+i].x - PositionsPrevious[gid].x) + toPower2(Grid[j*60+i].y - PositionsPrevious[gid].y));
+  //GridColor[i].w = min(1.0f, \ballActivation);
 
   }
 
-//GridColor[i].w = min(1.0f, metaballActivation);
+//float metaballActivation = 0.0f;
 
-  }
+
+//     for(int j = 0; j < 60; j++){
+//
+//   for(int i = 0; i < 80; i++){
+//
+//
+//    GridCol[j*60+i].w += GridCol[j*60+i].w  + (pow(BALL_RADIUS,2) / toPower2(Grid[j*60+i].x - PositionsPrevious[gid].x) + toPower2(Grid[j*60+i].y - PositionsPrevious[gid].y));
+//
+//   }
+//
+// //GridColor[i].w = min(1.0f, \ballActivation);
+//
+//   }
 
 
 

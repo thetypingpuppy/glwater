@@ -62,6 +62,7 @@ PFNGLMAPBUFFERRANGEPROC glMapBufferRange;
 PFNGLUNMAPBUFFERPROC glUnmapBuffer;
 PFNGLDISPATCHCOMPUTEPROC glDispatchCompute;
 PFNGLMEMORYBARRIERPROC glMemoryBarrier;
+//PFNGLCOLORPOINTER glColorPointer;
 
 /* FUNCTIONS */
 
@@ -97,6 +98,7 @@ void glextraGetFunctionPointers(){
         glUnmapBuffer = (PFNGLUNMAPBUFFERPROC)wglGetProcAddress("glUnmapBuffer");
         glDispatchCompute = (PFNGLDISPATCHCOMPUTEPROC)wglGetProcAddress("glDispatchCompute");
         glMemoryBarrier = (PFNGLMEMORYBARRIERPROC)wglGetProcAddress("glMemoryBarrier");
+        //glColorPointer = (PFNGLCOLORPOINTER)wglGetProcAddress("glColorPointer");
 }
 
 
@@ -162,13 +164,14 @@ void draw(GLuint vbo[NUM_BUFFER_OBJECTS], double width, double height){
 //
 
 
+glViewport(0, 0, width, height);
+glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
+glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+glColor3f(0.0f, 0.0f, 0.0f);
 
 
 
-  //glViewport(0, 0, width, height);
-  glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
-  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  glColor3f(0.0f, 0.0f, 0.0f);
+
 
 
 
@@ -214,15 +217,26 @@ glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 
 
   glUseProgram(mProgram2);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo[7]);
 
 
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glEnable( GL_BLEND );
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable( GL_BLEND );
 
-    glVertexPointer( 4, GL_FLOAT, 0, (void *)0 );
 
-//  glEnableVertexAttribArray(0);
+
+
+
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo[7]); // GRID
+        glVertexPointer( 4, GL_FLOAT, 0, (void *)0 );
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[8]); // GRID Color
+          glColorPointer( 4, GL_FLOAT, 0, (void *)0 );
+
+
+          glEnableClientState(GL_COLOR_ARRAY);
+  //glEnableVertexAttribArray(0);
 
 
   glDrawArrays(GL_POINTS, 0, (GLsizei)GRID_X*GRID_Y);
@@ -230,7 +244,7 @@ glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glDisableClientState(GL_VERTEX_ARRAY);
-
+  glDisableClientState(GL_COLOR_ARRAY);
 
     glDisable( GL_BLEND );
 
@@ -545,7 +559,7 @@ for(int i=0; i<300; i++){
 
   if((i<300) & (i >= 201)){
 
-    boundaryPoints[i].x = 0.9;
+    boundaryPoints[i].x = 1.0;
     boundaryPoints[i].y = y;
     y += 0.02;
 
@@ -587,9 +601,13 @@ struct pos *gridColors = (struct pos *) glMapBufferRange(GL_SHADER_STORAGE_BUFFE
 for (int j=0; j<GRID_Y; j++){
   for(int i=0; i<GRID_X; i++){
 
+      //RED
       gridColors[j*(int)GRID_X+i].x = 1.0f;//-1.0f  + 1.0f/GRID_X + (GLfloat)i*(2-(1/(GLfloat)GRID_X))/((GLfloat)GRID_X);
+      //GREEN
       gridColors[j*(int)GRID_X+i].y = 0.0f;//  + 1.0f/GRID_Y + (GLfloat)j*(2-(1/GRID_Y))/(GRID_Y);;
+      //BLUE
       gridColors[j*(int)GRID_X+i].z = 0.0f;
+      //ALPHA
       gridColors[j*(int)GRID_X+i].w = 1.0f;
   }
 }
